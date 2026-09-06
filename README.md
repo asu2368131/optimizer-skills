@@ -10,7 +10,8 @@ The goal is not optimization for its own sake. These skills help you choose impr
 
 | Skill | Focus |
 | --- | --- |
-| [`gas-production-readiness-auditor`](gas-production-readiness-auditor/SKILL.md) | Production-readiness audits for Google Apps Script projects. |
+| [`gas-production-readiness-auditor`](skills/gas-production-readiness-auditor/SKILL.md) | Production-readiness audits for Google Apps Script projects. |
+| [`vba-optimizer`](skills/vba-optimizer/SKILL.md) | Speed, correctness, and maintainability review for Excel VBA macros. |
 
 Each skill contains its own guidance on when to use it, what it evaluates, and how it presents results.
 
