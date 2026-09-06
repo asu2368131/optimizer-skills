@@ -388,6 +388,22 @@ In enterprise operations, a recurring trigger with an unknown owner is High.
 ### 49. Shared ownership / bus factor
 Check whether the production GAS project exists only in an individual's My Drive. Check whether ownership sits under a shared drive or organizational management, and whether more than one person can edit/deploy the script (i.e. whether the bus factor is greater than 1). Individual ownership with no handoff procedure is High.
 
+## HtmlService Templating & Web App Navigation
+
+These are quiet failures: the page renders, most links work, and only a filtered path, a non-ASCII value, or a form submit is broken. They do not throw, so they survive a smoke test. Check them whenever the project has an HtmlService web app or sidebar built from `createTemplateFromFile`.
+
+### 50. Query strings built by string concatenation inside `<?= ?>`
+`<?= cond ? '&key=' + encodeURIComponent(v) : '' ?>` inside an `href` is broken. HtmlService escapes scriptlet output in URL context, so a scriptlet-emitted `&` becomes `%26` and `=` becomes `%3D`. The following parameters then collapse into the previous parameter's value: `?page=detail&id=<uuid><?= '&category=' + ... ?>` renders as `?page=detail&id=<uuid>%26category%3D...`, so `e.parameter.id` arrives as `<uuid>&category=...` and the lookup fails ("not found"). Every `&` and `=` separator must be **literal template text**; a scriptlet may emit only an `encodeURIComponent`'d value or `''` — `&category=<?= cond ? encodeURIComponent(v) : '' ?>`. An empty parameter (`category=`) is harmless when the server treats it as falsy. Tell-tale symptom: the link works from the unfiltered page (the scriptlet emits `''`) and breaks only once a category/tag/query/flag is active. High — it silently breaks navigation and record lookups.
+
+### 51. `<? ?>` scriptlets are delimiter-matched, not parsed as JS
+The templating engine scans for the next literal `?>`; it does not understand JavaScript. A `?>` sitting inside a `//` or `/* */` comment (and writing `<?=` in a comment guarantees one) closes the scriptlet early and dumps the rest of the block onto the page as visible text. Never put `<?`, `<?=`, or `?>` inside a scriptlet, including in comments. Put explanatory prose in an HTML comment `<!-- -->` outside the scriptlet, and keep the `?>` that terminates any commented scriptlet on its own line.
+
+### 52. Web App `e.parameter` and non-ASCII values
+When the published `/exec` URL is opened at the top level, the Apps Script container page can re-encode non-ASCII query values before handing them to the sandbox iframe, so `e.parameter.x` arrives **still percent-encoded** (`%E4%B8%BB%E8%8F%9C` instead of the decoded text). ASCII parameters (`page`, a UUID `id`) are unaffected. Symptoms: category/search filters silently match nothing, a heading renders a raw `%..` string. Fix: in `doGet`, decode each text parameter once, guarded — only when the value still contains a `%XX` sequence, with a `try/catch` fallback to the raw value — and route every new text parameter through the same helper. Medium–High depending on how central the affected parameters are.
+
+### 53. Forms and links inside HtmlService need explicit absolute targets
+A `<form method="get">` with no `action` submits to the sandbox iframe URL (`*.googleusercontent.com/userCodeAppPanel`), producing a blank page. Set `action` to the deployed URL from `ScriptApp.getService().getUrl()`. The same root cause applies to relative `<a href>`: they resolve against the iframe URL, not the web app, so `doGet` never receives their parameters — navigation links must be absolute to the deployed URL. Confirm `<base target="_top">` is present so an absolute link replaces the whole page instead of nesting the app inside itself.
+
 ---
 
 # How to Conduct the Audit
@@ -396,7 +412,7 @@ Check whether the production GAS project exists only in an individual's My Drive
 2. Scan Performance first (#1–#6) — the largest source of bottlenecks
 3. Check Architecture & Maintainability (#7–#12)
 4. Check Reliability & Observability (#13–#16)
-5. Check the remaining categories (Formulas, UI, Front-End, DevEx, Security, GAS-Specific Pitfalls, Data/Ops Dependencies) as appropriate to the actual project — explicitly mark inapplicable categories as excluded from scoring
+5. Check the remaining categories (Formulas, UI, Front-End, DevEx, Security, GAS-Specific Pitfalls, HtmlService Templating & Web App Navigation, Data/Ops Dependencies) as appropriate to the actual project — explicitly mark inapplicable categories as excluded from scoring
 6. Check Reliability & Operational Readiness (#44–#49), plus #27 (Lock) and #37 (retry safety). Missing idempotency, failure fallback, state management, scope validation, trigger ownership, ownership concentration in one person, or manifest drift directly lowers Production Readiness
 7. Following the output format, compile the score, issues by Severity, Production Readiness verdict, and improvement suggestions. Keep recommendations to the minimum measures proportionate to the project's scale and risk (Rule 7)
 
@@ -414,4 +430,5 @@ Check whether the production GAS project exists only in an individual's My Drive
 9. Mass appendRow execution (#28)
 10. The getLastRow pitfall (#30)
 11. Web App execution-permission settings (#25)
+12. Query strings concatenated inside `<?= ?>` scriptlets; non-ASCII `e.parameter` still percent-encoded (#50, #52)
 ```
